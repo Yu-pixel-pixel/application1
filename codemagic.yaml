@@ -1,0 +1,54 @@
+workflows:
+  ios-testflight:
+    name: WalkPacer iOS → TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+        - pattern: claude/*
+          include: true
+
+    environment:
+      ios_signing:
+        distribution_type: app_store          # TestFlight配信用
+        bundle_identifier: com.yourname.WalkPacer   # ★Apple Developer登録時のBundle IDに変更
+      vars:
+        XCODE_PROJECT: WalkPacer/WalkPacer.xcodeproj
+        XCODE_SCHEME: WalkPacer
+      xcode: latest
+      cocoapods: default
+
+    scripts:
+      - name: ビルドバージョンを自動インクリメント
+        script: |
+          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID") + 1))
+          cd $CM_BUILD_DIR/WalkPacer
+          agvtool new-version -all $BUILD_NUMBER
+
+      - name: Xcodeビルド & アーカイブ
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration            # Codemagic管理画面でApp Store Connect API Keyを設定
+        submit_to_testflight: true
+        beta_groups:
+          - テスター                  # TestFlightのグループ名（任意）
+      email:
+        recipients:
+          - your-email@example.com   # ★自分のメールアドレスに変更
+        notify:
+          success: true
+          failure: true
