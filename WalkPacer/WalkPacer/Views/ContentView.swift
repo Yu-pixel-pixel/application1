@@ -29,66 +29,52 @@ struct ContentView: View {
     // MARK: - マップエリア
 
     private var mapArea: some View {
-        Map(position: $cameraPosition) {
-            // 現在地表示
-            UserAnnotation()
+        MapReader { proxy in
+            Map(position: $cameraPosition) {
+                // 現在地表示
+                UserAnnotation()
 
-            // 目的地ピン
-            if let destination = viewModel.destination {
-                Annotation("目的地", coordinate: destination) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 32, height: 32)
-                        Image(systemName: "flag.fill")
-                            .foregroundColor(.white)
-                            .font(.system(size: 14))
+                // 目的地ピン
+                if let destination = viewModel.destination {
+                    Annotation("目的地", coordinate: destination) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "flag.fill")
+                                .foregroundColor(.white)
+                                .font(.system(size: 14))
+                        }
                     }
                 }
-            }
 
-            // ルートポリライン
-            if let route = viewModel.routeManager.route {
-                MapPolyline(route.polyline)
-                    .stroke(Color.blue, lineWidth: 4)
-            }
-        }
-        .mapControls {
-            MapUserLocationButton()
-            MapCompass()
-            MapScaleView()
-        }
-        .onMapCameraChange { context in
-            // カメラ変更時は何もしない（自動追跡のみ）
-            _ = context
-        }
-        .overlay(alignment: .topLeading) {
-            if !viewModel.isNavigating {
-                Text("地図をタップして目的地を設定")
-                    .font(.caption)
-                    .padding(8)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(8)
-                    .padding(12)
-            }
-        }
-        .gesture(
-            SpatialTapGesture()
-                .onEnded { value in
-                    guard !viewModel.isNavigating else { return }
-                    // タップ位置をCoordinateに変換するためMapReaderを使う
+                // ルートポリライン
+                if let route = viewModel.routeManager.route {
+                    MapPolyline(route.polyline)
+                        .stroke(Color.blue, lineWidth: 4)
                 }
-        )
-        // MapReader でタップ位置→座標変換
-        .mapReader { proxy in
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture { location in
-                    guard !viewModel.isNavigating else { return }
-                    if let coordinate = proxy.convert(location, from: .local) {
-                        viewModel.destination = coordinate
-                    }
+            }
+            .mapControls {
+                MapUserLocationButton()
+                MapCompass()
+                MapScaleView()
+            }
+            .overlay(alignment: .topLeading) {
+                if !viewModel.isNavigating {
+                    Text("地図をタップして目的地を設定")
+                        .font(.caption)
+                        .padding(8)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(8)
+                        .padding(12)
                 }
+            }
+            .onTapGesture { location in
+                guard !viewModel.isNavigating else { return }
+                if let coordinate = proxy.convert(location, from: .local) {
+                    viewModel.destination = coordinate
+                }
+            }
         }
     }
 
