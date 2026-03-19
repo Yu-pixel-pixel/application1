@@ -1,11 +1,13 @@
 workflows:
-  ios-testflight:
-    name: WalkPacer iOS → TestFlight
-    max_build_duration: 60
-    instance_type: mac_mini_m2
+  # ★ Apple Developer登録後にこちらを使う（今はコメントアウト）
+  # ios-testflight:
+  #   name: WalkPacer iOS → TestFlight
+  #   ...
 
-    integrations:
-      app_store_connect: codemagic_api_key   # Codemagic管理画面のIntegrationsで登録した名前
+  ios-build-check:
+    name: WalkPacer ビルド確認（署名なし）
+    max_build_duration: 30
+    instance_type: mac_mini_m2
 
     triggering:
       events:
@@ -17,41 +19,20 @@ workflows:
           include: true
 
     environment:
-      ios_signing:
-        distribution_type: app_store          # TestFlight配信用
-        bundle_identifier: com.yourname.WalkPacer   # ★Apple Developer登録時のBundle IDに変更
       vars:
         XCODE_PROJECT: WalkPacer/WalkPacer.xcodeproj
         XCODE_SCHEME: WalkPacer
       xcode: latest
-      cocoapods: default
 
     scripts:
-      - name: ビルドバージョンを自動インクリメント
+      - name: Xcodeビルド（署名なし・コンパイル確認のみ）
         script: |
-          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID") + 1))
-          cd $CM_BUILD_DIR/WalkPacer
-          agvtool new-version -all $BUILD_NUMBER
-
-      - name: Xcodeビルド & アーカイブ
-        script: |
-          xcode-project build-ipa \
-            --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME"
+          xcodebuild build \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty
 
     artifacts:
-      - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        beta_groups:
-          - テスター                  # TestFlightのグループ名（任意）
-      email:
-        recipients:
-          - your-email@example.com   # ★自分のメールアドレスに変更
-        notify:
-          success: true
-          failure: true
