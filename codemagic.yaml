@@ -4,6 +4,9 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
 
+    integrations:
+      app_store_connect: codemagic_api_key   # Codemagic管理画面のIntegrationsで登録した名前
+
     triggering:
       events:
         - push
@@ -42,7 +45,7 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration            # Codemagic管理画面でApp Store Connect API Keyを設定
+        auth: integration
         submit_to_testflight: true
         beta_groups:
           - テスター                  # TestFlightのグループ名（任意）
