@@ -31,10 +31,8 @@ struct ContentView: View {
     private var mapArea: some View {
         MapReader { proxy in
             Map(position: $cameraPosition) {
-                // 現在地表示
                 UserAnnotation()
 
-                // 目的地ピン
                 if let destination = viewModel.destination {
                     Annotation("目的地", coordinate: destination) {
                         ZStack {
@@ -48,7 +46,6 @@ struct ContentView: View {
                     }
                 }
 
-                // ルートポリライン
                 if let route = viewModel.routeManager.route {
                     MapPolyline(route.polyline)
                         .stroke(Color.blue, lineWidth: 4)
@@ -61,12 +58,14 @@ struct ContentView: View {
             }
             .overlay(alignment: .topLeading) {
                 if !viewModel.isNavigating {
-                    Text("地図をタップして目的地を設定")
+                    Label("地図をタップして目的地を設定", systemImage: "mappin.and.ellipse")
                         .font(.caption)
-                        .padding(8)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
                         .background(.ultraThinMaterial)
                         .cornerRadius(8)
-                        .padding(12)
+                        .padding(.top, 56)   // ステータスバー分を避ける
+                        .padding(.leading, 12)
                 }
             }
             .onTapGesture { location in
@@ -82,11 +81,11 @@ struct ContentView: View {
 
     private var paceInfoArea: some View {
         ZStack {
-            // 背景色
             paceBackgroundColor
                 .ignoresSafeArea(edges: .bottom)
+                .animation(.easeInOut(duration: 0.4), value: viewModel.paceStatus)
 
-            VStack(spacing: 12) {
+            VStack(spacing: 0) {
                 if viewModel.isNavigating {
                     navigatingInfoView
                 } else {
@@ -94,7 +93,8 @@ struct ContentView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
         }
     }
 
@@ -102,41 +102,56 @@ struct ContentView: View {
 
     private var navigatingInfoView: some View {
         VStack(spacing: 10) {
+
             // ペースメッセージ
             Text(viewModel.paceStatus.message)
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.title2.bold())
                 .foregroundColor(paceTextColor)
                 .multilineTextAlignment(.center)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.paceStatus)
 
-            Divider()
-                .background(paceTextColor.opacity(0.4))
+            // 進捗バー
+            progressBar
 
-            // 残り距離
-            HStack {
-                Image(systemName: "figure.walk")
-                Text("目的地まであと \(Int(viewModel.remainingDistance)) m")
-                    .font(.headline)
+            // 残り距離 & 到着時刻
+            HStack(spacing: 0) {
+                infoCell(
+                    icon: "figure.walk",
+                    label: "残り距離",
+                    value: formattedDistance(viewModel.remainingDistance)
+                )
+                Divider()
+                    .frame(height: 40)
+                    .background(paceTextColor.opacity(0.3))
+                infoCell(
+                    icon: "clock",
+                    label: "到着設定",
+                    value: viewModel.arrivalTime.formatted(date: .omitted, time: .shortened)
+                )
             }
-            .foregroundColor(paceTextColor)
+            .background(paceTextColor.opacity(0.1))
+            .cornerRadius(10)
 
-            // 到着設定時刻
-            HStack {
-                Image(systemName: "clock")
-                Text("到着設定時刻: \(viewModel.arrivalTime, style: .time)")
-                    .font(.subheadline)
+            // 速度グリッド
+            HStack(spacing: 0) {
+                speedCell(
+                    label: "必要速度",
+                    value: String(format: "%.1f", viewModel.requiredSpeed * 3.6),
+                    unit: "km/h",
+                    icon: "arrow.up.circle"
+                )
+                Divider()
+                    .frame(height: 40)
+                    .background(paceTextColor.opacity(0.3))
+                speedCell(
+                    label: "現在速度",
+                    value: String(format: "%.1f", viewModel.currentSpeed * 3.6),
+                    unit: "km/h",
+                    icon: "speedometer"
+                )
             }
-            .foregroundColor(paceTextColor.opacity(0.9))
-
-            // 速度情報
-            HStack {
-                Image(systemName: "speedometer")
-                Text(String(format: "必要速度: %.1f km/h  ／  現在速度: %.1f km/h",
-                            viewModel.requiredSpeed * 3.6,
-                            viewModel.currentSpeed * 3.6))
-                    .font(.subheadline)
-            }
-            .foregroundColor(paceTextColor.opacity(0.9))
+            .background(paceTextColor.opacity(0.1))
+            .cornerRadius(10)
 
             Spacer()
 
@@ -148,10 +163,42 @@ struct ContentView: View {
                     .font(.headline)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.black.opacity(0.4))
-                    .cornerRadius(12)
+                    .padding(.vertical, 14)
+                    .background(Color.black.opacity(0.35))
+                    .cornerRadius(14)
             }
+        }
+    }
+
+    // MARK: - 進捗バー
+
+    private var progressBar: some View {
+        let total = viewModel.routeManager.totalDistance
+        let walked = total - viewModel.remainingDistance
+        let progress = total > 0 ? min(walked / total, 1.0) : 0.0
+
+        return VStack(spacing: 4) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(paceTextColor.opacity(0.2))
+                    Capsule()
+                        .fill(paceTextColor.opacity(0.85))
+                        .frame(width: geo.size.width * progress)
+                        .animation(.easeInOut(duration: 0.5), value: progress)
+                }
+            }
+            .frame(height: 6)
+
+            HStack {
+                Text("出発")
+                Spacer()
+                Text(String(format: "%.0f%%", progress * 100))
+                Spacer()
+                Text("目的地")
+            }
+            .font(.caption2)
+            .foregroundColor(paceTextColor.opacity(0.7))
         }
     }
 
@@ -159,7 +206,6 @@ struct ContentView: View {
 
     private var setupView: some View {
         VStack(spacing: 14) {
-            // 目的地設定状態
             if viewModel.destination != nil {
                 Label("目的地が設定されました", systemImage: "checkmark.circle.fill")
                     .foregroundColor(.green)
@@ -171,7 +217,6 @@ struct ContentView: View {
                     .multilineTextAlignment(.center)
             }
 
-            // 到着希望時刻
             DatePicker(
                 "到着希望時刻",
                 selection: $viewModel.arrivalTime,
@@ -183,39 +228,81 @@ struct ContentView: View {
 
             Spacer()
 
-            // スタートボタン（目的地設定済みの場合のみ表示）
             if viewModel.destination != nil {
                 Button {
                     viewModel.startNavigation()
                 } label: {
-                    if viewModel.routeManager.isLoading {
-                        HStack {
-                            ProgressView()
-                                .tint(.white)
-                            Text("経路を取得中...")
+                    Group {
+                        if viewModel.routeManager.isLoading {
+                            HStack {
+                                ProgressView().tint(.white)
+                                Text("経路を取得中...")
+                            }
+                        } else {
+                            Label("スタート", systemImage: "play.fill")
                         }
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(12)
-                    } else {
-                        Label("スタート", systemImage: "play.fill")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .cornerRadius(12)
                     }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.blue)
+                    .cornerRadius(14)
                 }
                 .disabled(viewModel.routeManager.isLoading)
             }
         }
     }
 
-    // MARK: - ヘルパー
+    // MARK: - ヘルパービュー
+
+    private func infoCell(icon: String, label: String, value: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.subheadline)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.caption2)
+                    .opacity(0.7)
+                Text(value)
+                    .font(.subheadline.bold())
+            }
+        }
+        .foregroundColor(paceTextColor)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+    }
+
+    private func speedCell(label: String, value: String, unit: String, icon: String) -> some View {
+        VStack(spacing: 2) {
+            Image(systemName: icon)
+                .font(.caption)
+                .opacity(0.7)
+            Text(label)
+                .font(.caption2)
+                .opacity(0.7)
+            HStack(alignment: .lastTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.title3.bold())
+                Text(unit)
+                    .font(.caption2)
+                    .opacity(0.8)
+            }
+        }
+        .foregroundColor(paceTextColor)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - ユーティリティ
+
+    private func formattedDistance(_ meters: Double) -> String {
+        if meters >= 1000 {
+            return String(format: "%.1f km", meters / 1000)
+        } else {
+            return String(format: "%.0f m", meters)
+        }
+    }
 
     private var paceBackgroundColor: Color {
         guard viewModel.isNavigating else { return Color(.systemGray6) }
