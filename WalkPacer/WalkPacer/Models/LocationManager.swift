@@ -23,18 +23,23 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     func requestAuthorization() {
-        manager.requestWhenInUseAuthorization()
+        // バックグラウンド追跡のため「常に許可」をリクエスト
+        manager.requestAlwaysAuthorization()
     }
 
     func startTracking() {
         totalWalkedDistance = 0.0
         previousLocation = nil
         currentSpeed = 0.0
+        // 画面OFFでも位置情報を取得し続ける
+        manager.allowsBackgroundLocationUpdates = true
+        manager.pausesLocationUpdatesAutomatically = false
         manager.startUpdatingLocation()
     }
 
     func stopTracking() {
         manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = false
         previousLocation = nil
     }
 

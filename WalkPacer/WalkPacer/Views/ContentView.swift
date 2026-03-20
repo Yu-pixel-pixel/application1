@@ -6,14 +6,16 @@ struct ContentView: View {
     @StateObject private var viewModel = MainViewModel()
     @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
 
+    // 目的地検索
+    @State private var searchText: String = ""
+    @State private var searchResults: [MKMapItem] = []
+    @State private var searchTask: Task<Void, Never>?
+
     var body: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
-                // MARK: - 上半分: マップエリア
                 mapArea
                     .frame(height: geometry.size.height * 0.55)
-
-                // MARK: - 下半分: ペース情報エリア
                 paceInfoArea
                     .frame(height: geometry.size.height * 0.45)
             }
@@ -64,7 +66,7 @@ struct ContentView: View {
                         .padding(.vertical, 6)
                         .background(.ultraThinMaterial)
                         .cornerRadius(8)
-                        .padding(.top, 56)   // ステータスバー分を避ける
+                        .padding(.top, 56)
                         .padding(.leading, 12)
                 }
             }
@@ -72,6 +74,8 @@ struct ContentView: View {
                 guard !viewModel.isNavigating else { return }
                 if let coordinate = proxy.convert(location, from: .local) {
                     viewModel.destination = coordinate
+                    searchText = ""
+                    searchResults = []
                 }
             }
         }
@@ -102,18 +106,14 @@ struct ContentView: View {
 
     private var navigatingInfoView: some View {
         VStack(spacing: 10) {
-
-            // ペースメッセージ
             Text(viewModel.paceStatus.message)
                 .font(.title2.bold())
                 .foregroundColor(paceTextColor)
                 .multilineTextAlignment(.center)
                 .animation(.easeInOut(duration: 0.3), value: viewModel.paceStatus)
 
-            // 進捗バー
             progressBar
 
-            // 残り距離 & 到着時刻
             HStack(spacing: 0) {
                 infoCell(
                     icon: "figure.walk",
@@ -132,7 +132,6 @@ struct ContentView: View {
             .background(paceTextColor.opacity(0.1))
             .cornerRadius(10)
 
-            // 速度グリッド
             HStack(spacing: 0) {
                 speedCell(
                     label: "必要速度",
@@ -155,7 +154,6 @@ struct ContentView: View {
 
             Spacer()
 
-            // 停止ボタン
             Button {
                 viewModel.stopNavigation()
             } label: {
@@ -180,8 +178,7 @@ struct ContentView: View {
         return VStack(spacing: 4) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(paceTextColor.opacity(0.2))
+                    Capsule().fill(paceTextColor.opacity(0.2))
                     Capsule()
                         .fill(paceTextColor.opacity(0.85))
                         .frame(width: geo.size.width * progress)
@@ -205,18 +202,83 @@ struct ContentView: View {
     // MARK: - 設定ビュー（ナビ開始前）
 
     private var setupView: some View {
-        VStack(spacing: 14) {
-            if viewModel.destination != nil {
-                Label("目的地が設定されました", systemImage: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                    .font(.subheadline)
-            } else {
-                Label("地図をタップして目的地を設定してください", systemImage: "mappin.circle")
+        VStack(spacing: 12) {
+
+            // 検索バー
+            HStack {
+                Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                    .font(.subheadline)
-                    .multilineTextAlignment(.center)
+                TextField("目的地を検索（例: 渋谷駅）", text: $searchText)
+                    .submitLabel(.search)
+                    .onSubmit { performSearch(query: searchText) }
+                    .onChange(of: searchText) { _, newValue in
+                        performSearch(query: newValue)
+                    }
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                        searchResults = []
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color(.systemBackground))
+            .cornerRadius(10)
+            .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+
+            // 検索結果リスト
+            if !searchResults.isEmpty {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(searchResults, id: \.self) { item in
+                            Button {
+                                selectSearchResult(item)
+                            } label: {
+                                HStack {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .foregroundColor(.red)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.name ?? "不明な場所")
+                                            .font(.subheadline)
+                                            .foregroundColor(.primary)
+                                        if let address = item.placemark.title {
+                                            Text(address)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                            }
+                            Divider().padding(.leading, 40)
+                        }
+                    }
+                    .background(Color(.systemBackground))
+                    .cornerRadius(10)
+                    .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+                }
+                .frame(maxHeight: 160)
+            } else {
+                // 検索結果がない場合は目的地設定状態を表示
+                if viewModel.destination != nil {
+                    Label("目的地が設定されました", systemImage: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.subheadline)
+                } else {
+                    Label("地図をタップするか上で検索してください", systemImage: "mappin.circle")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                }
             }
 
+            // 到着希望時刻
             DatePicker(
                 "到着希望時刻",
                 selection: $viewModel.arrivalTime,
@@ -254,18 +316,49 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - 検索ロジック
+
+    private func performSearch(query: String) {
+        searchTask?.cancel()
+        guard !query.isEmpty else {
+            searchResults = []
+            return
+        }
+        searchTask = Task {
+            // 0.4秒待って連続入力中は検索しない
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = query
+            let search = MKLocalSearch(request: request)
+            let response = try? await search.start()
+
+            await MainActor.run {
+                searchResults = response?.mapItems ?? []
+            }
+        }
+    }
+
+    private func selectSearchResult(_ item: MKMapItem) {
+        viewModel.destination = item.placemark.coordinate
+        // マップをその場所に移動
+        cameraPosition = .region(MKCoordinateRegion(
+            center: item.placemark.coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        ))
+        searchText = item.name ?? ""
+        searchResults = []
+    }
+
     // MARK: - ヘルパービュー
 
     private func infoCell(icon: String, label: String, value: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.subheadline)
+            Image(systemName: icon).font(.subheadline)
             VStack(alignment: .leading, spacing: 1) {
-                Text(label)
-                    .font(.caption2)
-                    .opacity(0.7)
-                Text(value)
-                    .font(.subheadline.bold())
+                Text(label).font(.caption2).opacity(0.7)
+                Text(value).font(.subheadline.bold())
             }
         }
         .foregroundColor(paceTextColor)
@@ -275,18 +368,11 @@ struct ContentView: View {
 
     private func speedCell(label: String, value: String, unit: String, icon: String) -> some View {
         VStack(spacing: 2) {
-            Image(systemName: icon)
-                .font(.caption)
-                .opacity(0.7)
-            Text(label)
-                .font(.caption2)
-                .opacity(0.7)
+            Image(systemName: icon).font(.caption).opacity(0.7)
+            Text(label).font(.caption2).opacity(0.7)
             HStack(alignment: .lastTextBaseline, spacing: 2) {
-                Text(value)
-                    .font(.title3.bold())
-                Text(unit)
-                    .font(.caption2)
-                    .opacity(0.8)
+                Text(value).font(.title3.bold())
+                Text(unit).font(.caption2).opacity(0.8)
             }
         }
         .foregroundColor(paceTextColor)
@@ -297,11 +383,9 @@ struct ContentView: View {
     // MARK: - ユーティリティ
 
     private func formattedDistance(_ meters: Double) -> String {
-        if meters >= 1000 {
-            return String(format: "%.1f km", meters / 1000)
-        } else {
-            return String(format: "%.0f m", meters)
-        }
+        meters >= 1000
+            ? String(format: "%.1f km", meters / 1000)
+            : String(format: "%.0f m", meters)
     }
 
     private var paceBackgroundColor: Color {
@@ -309,17 +393,14 @@ struct ContentView: View {
         switch viewModel.paceStatus {
         case .onPace:         return Color.blue.opacity(0.85)
         case .slightlyBehind: return Color.yellow.opacity(0.85)
-        case .behind:         return Color.red.opacity(0.85)
-        case .overdue:        return Color.red.opacity(0.85)
+        case .behind, .overdue: return Color.red.opacity(0.85)
         }
     }
 
     private var paceTextColor: Color {
         switch viewModel.paceStatus {
-        case .onPace:         return .white
-        case .slightlyBehind: return Color(.darkText)
-        case .behind:         return .white
-        case .overdue:        return .white
+        case .onPace, .behind, .overdue: return .white
+        case .slightlyBehind:            return Color(.darkText)
         }
     }
 }
