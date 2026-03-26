@@ -1,37 +1,42 @@
 import Foundation
 
 enum PaceStatus: Equatable {
-    case onPace          // 青: このペースで間に合います
-    case slightlyBehind  // 黄: 少し早歩きしましょう
-    case behind          // 赤: 急ぎましょう！
-    case overdue         // 赤: 設定時刻を過ぎています
+    case onPace          // 緑: 余裕で間に合います
+    case slightlyBehind  // 黄: 急ぎ足が必要です
+    case behind          // 赤: 間に合いません
+    case overdue         // 赤: 時刻を過ぎています
 
     var message: String {
         switch self {
-        case .onPace:         return "このペースで間に合います"
-        case .slightlyBehind: return "少し早歩きしましょう"
-        case .behind:         return "急ぎましょう！"
-        case .overdue:        return "設定時刻を過ぎています"
+        case .onPace:         return "余裕で間に合います"
+        case .slightlyBehind: return "急ぎ足で歩きましょう"
+        case .behind:         return "間に合いません！"
+        case .overdue:        return "時刻を過ぎています"
         }
+    }
+
+    var isRed: Bool {
+        self == .behind || self == .overdue
     }
 }
 
 struct PaceCalculationResult {
     let status: PaceStatus
     let remainingDistance: Double  // メートル
+    let remainingMinutes: Int      // 残り時間（分）
     let requiredSpeed: Double      // m/s
     let currentSpeed: Double       // m/s
 }
 
 struct PaceCalculator {
 
-    /// ペースを計算する
-    /// - Parameters:
-    ///   - totalDistance: 総道のり（メートル）
-    ///   - walkedDistance: 累計歩行距離（メートル）
-    ///   - arrivalTime: 到着希望時刻
-    ///   - currentSpeed: 現在速度（m/s）、負値は0として扱う
-    /// - Returns: PaceCalculationResult
+    // 徒歩の速度定義
+    // 快適ウォーク ≤ 4.5 km/h → 緑
+    // 早歩き ≤ 7.0 km/h       → 黄
+    // それ以上                 → 赤（走らないと無理）
+    private let comfortableSpeed: Double = 4.5 / 3.6  // m/s
+    private let fastWalkSpeed: Double    = 7.0 / 3.6  // m/s
+
     func calculate(
         totalDistance: Double,
         walkedDistance: Double,
@@ -42,31 +47,36 @@ struct PaceCalculator {
         let remainingDistance = max(totalDistance - walkedDistance, 0.0)
         let remainingTime = arrivalTime.timeIntervalSinceNow  // 秒
 
-        // 残り時間が0以下 → 時刻超過
+        let remainingMinutes = max(Int(remainingTime / 60), 0)
+
+        // 時刻超過
         guard remainingTime > 0 else {
             return PaceCalculationResult(
                 status: .overdue,
                 remainingDistance: remainingDistance,
+                remainingMinutes: 0,
                 requiredSpeed: 0.0,
                 currentSpeed: safeCurrentSpeed
             )
         }
 
-        // 必要速度 = 残り距離 / 残り時間
+        // 必要速度 = 残り距離 ÷ 残り時間
         let requiredSpeed = remainingDistance / remainingTime
 
+        // 現在速度ではなく「必要速度 vs 徒歩の標準速度」で判定
         let status: PaceStatus
-        if safeCurrentSpeed >= requiredSpeed {
-            status = .onPace
-        } else if safeCurrentSpeed >= requiredSpeed * 0.8 {
-            status = .slightlyBehind
+        if requiredSpeed <= comfortableSpeed {
+            status = .onPace          // 快適ウォークで間に合う
+        } else if requiredSpeed <= fastWalkSpeed {
+            status = .slightlyBehind  // 早歩きで間に合う
         } else {
-            status = .behind
+            status = .behind          // 走っても難しい
         }
 
         return PaceCalculationResult(
             status: status,
             remainingDistance: remainingDistance,
+            remainingMinutes: remainingMinutes,
             requiredSpeed: requiredSpeed,
             currentSpeed: safeCurrentSpeed
         )

@@ -6,6 +6,8 @@
 	<string>現在地から目的地までのペースを計算するために位置情報を使用します</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>画面がOFFの間も歩行ペースを追跡し続けるために位置情報を使用します</string>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>ペースが遅れたときや目的地到着時に通知でお知らせします</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

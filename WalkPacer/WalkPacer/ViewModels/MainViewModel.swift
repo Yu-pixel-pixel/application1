@@ -11,15 +11,18 @@ class MainViewModel: ObservableObject {
     let locationManager = LocationManager()
     let routeManager = RouteManager()
     private let paceCalculator = PaceCalculator()
+    private let hapticManager = HapticNotificationManager.shared
 
     // MARK: - State
     @Published var destination: CLLocationCoordinate2D?
-    @Published var arrivalTime: Date = Date().addingTimeInterval(30 * 60)  // デフォルト: 現在時刻+30分
+    @Published var arrivalTime: Date = Date().addingTimeInterval(30 * 60)
     @Published var isNavigating: Bool = false
+    @Published var hasArrived: Bool = false
 
     // ペース情報
     @Published var paceStatus: PaceStatus = .onPace
     @Published var remainingDistance: Double = 0.0
+    @Published var remainingMinutes: Int = 0
     @Published var requiredSpeed: Double = 0.0
     @Published var currentSpeed: Double = 0.0
 
@@ -29,9 +32,11 @@ class MainViewModel: ObservableObject {
 
     // MARK: - Combine
     private var cancellables = Set<AnyCancellable>()
+    private var previousStatus: PaceStatus = .onPace
 
     init() {
         locationManager.requestAuthorization()
+        hapticManager.requestPermission()
         setupLocationSubscription()
         setupAuthorizationSubscription()
     }
@@ -45,16 +50,14 @@ class MainViewModel: ObservableObject {
             return
         }
 
+        hasArrived = false
+        previousStatus = .onPace
+
         Task {
             do {
-                // 経路取得（1回のみ）
                 try await routeManager.fetchRoute(from: currentCoordinate, to: destination)
-
-                // トラッキング開始
                 locationManager.startTracking()
                 isNavigating = true
-
-                // 画面スリープ防止
                 UIApplication.shared.isIdleTimerDisabled = true
             } catch {
                 showAlertMessage(error.localizedDescription)
@@ -66,21 +69,20 @@ class MainViewModel: ObservableObject {
         locationManager.stopTracking()
         routeManager.reset()
         isNavigating = false
+        hasArrived = false
 
-        // 状態リセット
         paceStatus = .onPace
         remainingDistance = 0.0
+        remainingMinutes = 0
         requiredSpeed = 0.0
         currentSpeed = 0.0
 
-        // 画面スリープ防止を解除
         UIApplication.shared.isIdleTimerDisabled = false
     }
 
     // MARK: - Private
 
     private func setupLocationSubscription() {
-        // 位置情報が更新されるたびにペースを再計算する
         locationManager.$currentLocation
             .compactMap { $0 }
             .combineLatest(locationManager.$totalWalkedDistance, locationManager.$currentSpeed)
@@ -98,7 +100,7 @@ class MainViewModel: ObservableObject {
             .sink { [weak self] status in
                 guard let self = self else { return }
                 if status == .denied || status == .restricted {
-                    self.showAlertMessage("位置情報の使用が許可されていません。設定アプリから「位置情報」を「このAppの使用中」に変更してください。")
+                    self.showAlertMessage("位置情報が許可されていません。設定 → プライバシー → 位置情報サービス から許可してください。")
                 }
             }
             .store(in: &cancellables)
@@ -107,6 +109,14 @@ class MainViewModel: ObservableObject {
     private func recalculatePace(walkedDistance: Double, speed: Double) {
         guard routeManager.totalDistance > 0 else { return }
 
+        // 到着判定（残り30m以内）
+        let remaining = max(routeManager.totalDistance - walkedDistance, 0)
+        if remaining < 30 && !hasArrived {
+            hasArrived = true
+            hapticManager.handleArrival()
+            return
+        }
+
         let result = paceCalculator.calculate(
             totalDistance: routeManager.totalDistance,
             walkedDistance: walkedDistance,
@@ -114,8 +124,15 @@ class MainViewModel: ObservableObject {
             currentSpeed: speed
         )
 
+        // ステータスが悪化したらハプティクス＋通知
+        if result.status != previousStatus {
+            hapticManager.handleStatusChange(from: previousStatus, to: result.status)
+            previousStatus = result.status
+        }
+
         paceStatus = result.status
         remainingDistance = result.remainingDistance
+        remainingMinutes = result.remainingMinutes
         requiredSpeed = result.requiredSpeed
         currentSpeed = result.currentSpeed
     }
