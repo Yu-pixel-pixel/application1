@@ -13,6 +13,7 @@
 		AA100004 /* RouteManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA200004 /* RouteManager.swift */; };
 		AA100005 /* PaceCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA200005 /* PaceCalculator.swift */; };
 		AA100006 /* MainViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA200006 /* MainViewModel.swift */; };
+		AA100007 /* HapticNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA200009 /* HapticNotificationManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +24,7 @@
 		AA200005 /* PaceCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaceCalculator.swift; sourceTree = "<group>"; };
 		AA200006 /* MainViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewModel.swift; sourceTree = "<group>"; };
 		AA200007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA200009 /* HapticNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticNotificationManager.swift; sourceTree = "<group>"; };
 		AA200008 /* WalkPacer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WalkPacer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -63,6 +65,7 @@
 				AA200003 /* LocationManager.swift */,
 				AA200004 /* RouteManager.swift */,
 				AA200005 /* PaceCalculator.swift */,
+				AA200009 /* HapticNotificationManager.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -166,6 +169,7 @@
 				AA100004 /* RouteManager.swift in Sources */,
 				AA100005 /* PaceCalculator.swift in Sources */,
 				AA100006 /* MainViewModel.swift in Sources */,
+				AA100007 /* HapticNotificationManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
